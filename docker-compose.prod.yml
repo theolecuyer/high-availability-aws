@@ -1,0 +1,29 @@
+# PRODUCTION (EC2 in the Auto Scaling group). No database container: the backend talks to RDS.
+# Images are pulled from ECR. Every value comes from the .env file written next to this
+# file at boot (secrets from SSM Parameter Store, INSTANCE_ID / AVAILABILITY_ZONE from IMDS).
+#   docker compose -f docker-compose.prod.yml up -d
+services:
+  frontend:
+    image: ${ECR_REGISTRY:?set in .env}/ecommerce-frontend:${IMAGE_TAG:?set in .env}
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  backend:
+    image: ${ECR_REGISTRY:?set in .env}/ecommerce-backend:${IMAGE_TAG:?set in .env}
+    restart: always
+    # Not published to the host; only nginx reaches it over the Compose network
+    environment:
+      USE_LOCALHOST: "false"
+      PORT: "3001"
+      DB_SERVER_HOST: ${DB_SERVER_HOST:?set in .env}
+      DB_SERVER_USER: ${DB_SERVER_USER:?set in .env}
+      DB_SERVER_PASSWORD: ${DB_SERVER_PASSWORD:?set in .env}
+      DB_SERVER_DATABASE: ${DB_SERVER_DATABASE:?set in .env}
+      JWT_SECRET_KEY_ACCESS_TOKEN: ${JWT_SECRET_KEY_ACCESS_TOKEN:?set in .env}
+      JWT_SECRET_KEY_REFRESH_TOKEN: ${JWT_SECRET_KEY_REFRESH_TOKEN:?set in .env}
+      # Optional; /api/health falls back to the container hostname when empty
+      INSTANCE_ID: ${INSTANCE_ID:-}
+      AVAILABILITY_ZONE: ${AVAILABILITY_ZONE:-}

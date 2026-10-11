@@ -26,11 +26,12 @@ if (useLocalhost) {
 
 
 
-const pool = mysql2.createConnection(connectionParams);
-
-pool.connect((err) => {
-    if (err) console.log(err.message);
-    else console.log("DB Connection Done")
+// A pool replaces dead connections on its own (e.g. after an RDS Multi-AZ failover)
+const pool = mysql2.createPool({
+    ...connectionParams,
+    waitForConnections: true,
+    connectionLimit: 10,
+    enableKeepAlive: true,
 });
 
 // Export the pool

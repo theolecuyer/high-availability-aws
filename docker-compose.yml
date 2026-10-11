@@ -1,0 +1,53 @@
+# LOCAL testing only: builds from source and runs a throwaway MySQL 8 container.
+# Production (EC2) uses docker-compose.prod.yml, with RDS instead of MySQL.
+#
+# Values come from a .env file next to this file (see .env.example; DB_SERVER_HOST,
+# ECR_REGISTRY and IMAGE_TAG aren't used here). Then:
+#   docker compose up --build
+#   open http://localhost:8080
+services:
+  frontend:
+    build:
+      context: ./client
+      args:
+        REACT_APP_API_URL: /
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./server
+    # Not published to the host; nginx reaches it as http://backend:3001
+    environment:
+      USE_LOCALHOST: "false"
+      PORT: "3001"
+      DB_SERVER_HOST: mysql
+      DB_SERVER_USER: ${DB_SERVER_USER:?set in .env}
+      DB_SERVER_PASSWORD: ${DB_SERVER_PASSWORD:?set in .env}
+      DB_SERVER_DATABASE: ${DB_SERVER_DATABASE:?set in .env}
+      JWT_SECRET_KEY_ACCESS_TOKEN: ${JWT_SECRET_KEY_ACCESS_TOKEN:?set in .env}
+      JWT_SECRET_KEY_REFRESH_TOKEN: ${JWT_SECRET_KEY_REFRESH_TOKEN:?set in .env}
+      INSTANCE_ID: local
+      AVAILABILITY_ZONE: local
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${DB_SERVER_DATABASE:?set in .env}
+      MYSQL_USER: ${DB_SERVER_USER:?set in .env}
+      MYSQL_PASSWORD: ${DB_SERVER_PASSWORD:?set in .env}
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    volumes:
+      # Runs once, on first start with an empty data dir, against MYSQL_DATABASE
+      - ./database/createTables.sql:/docker-entrypoint-initdb.d/01-createTables.sql:ro
+    healthcheck:
+      # TCP ping fails during the init phase (networking is off), so "healthy" means schema loaded
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
